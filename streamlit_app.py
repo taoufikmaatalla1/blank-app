@@ -8,7 +8,7 @@ from urllib.parse import quote_plus
 import pandas as pd
 import streamlit as st
 
-from pilot import calc, db, messages
+from pilot import calc, connections, db, messages
 
 st.set_page_config(page_title="Seller Control Center", page_icon="📦", layout="wide")
 
@@ -103,7 +103,7 @@ st.caption(
 )
 
 tabs = st.tabs(["Overview", "Margins & prices", "Amazon comparison", "Suppliers (Alibaba)",
-                "Orders", "Listings & ads", "Launch checklist"])
+                "Orders", "Listings & ads", "Launch checklist", "Connections"])
 
 suppliers = db.read("suppliers")
 orders = db.read("orders")
@@ -499,6 +499,10 @@ with tabs[6]:
             db.write("checklist", ed)
             bump()
             st.rerun()
+
+# ---------------------------------------------------------------- connections
+with tabs[7]:
+    connections.render(products, prod_names)
 
 st.divider()
 st.caption("Data is stored in a local SQLite file on the machine running this app. "

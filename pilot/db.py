@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -52,11 +54,17 @@ ORDER_STATUSES = ["Draft", "Awaiting payment", "Paid", "In production", "Shipped
                   "At Amazon FC", "Cancelled"]
 
 
-def connect() -> sqlite3.Connection:
+@contextmanager
+def connect() -> Iterator[sqlite3.Connection]:
+    """Open the database, commit on success, roll back on error, always close."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
-    return con
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
 
 
 def init(force_seed: bool = False) -> None:
@@ -163,3 +171,48 @@ def load_snapshot(data: dict) -> None:
     save_settings({**seed.DEFAULT_SETTINGS, **data.get("settings", {})})
     for table in SCHEMA:
         write(table, pd.DataFrame(data.get(table, []), columns=["id", *SCHEMA[table]]))
+
+
+# ---------------------------------------------------------------- integrations
+# Tokens and webhook events live in their own tables, which are never included
+# in the downloadable backup.
+
+def _init_private(con: sqlite3.Connection) -> None:
+    con.execute("CREATE TABLE IF NOT EXISTS secrets (key TEXT PRIMARY KEY, value TEXT)")
+    con.execute("CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, source TEXT, "
+                "kind TEXT, dedup_key TEXT UNIQUE, received_at TEXT, payload TEXT, "
+                "processed INTEGER DEFAULT 0)")
+
+
+def get_secret(key: str, default=None):
+    with connect() as con:
+        _init_private(con)
+        row = con.execute("SELECT value FROM secrets WHERE key = ?", (key,)).fetchone()
+    return json.loads(row["value"]) if row else default
+
+
+def set_secret(key: str, value) -> None:
+    with connect() as con:
+        _init_private(con)
+        con.execute("INSERT INTO secrets(key, value) VALUES(?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, json.dumps(value)))
+
+
+def add_event(source: str, kind: str, dedup_key: str, payload: str) -> bool:
+    """Store a webhook event. Returns False if it was already received (duplicate)."""
+    from datetime import datetime, timezone
+    with connect() as con:
+        _init_private(con)
+        cur = con.execute(
+            "INSERT OR IGNORE INTO events(source, kind, dedup_key, received_at, payload) "
+            "VALUES(?, ?, ?, ?, ?)",
+            (source, kind, dedup_key, datetime.now(timezone.utc).isoformat(timespec="seconds"), payload))
+        return cur.rowcount == 1
+
+
+def events(limit: int = 50) -> pd.DataFrame:
+    with connect() as con:
+        _init_private(con)
+        return pd.read_sql_query(
+            "SELECT id, source, kind, received_at, payload FROM events ORDER BY id DESC LIMIT ?",
+            con, params=(limit,))
