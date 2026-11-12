@@ -1,7 +1,7 @@
 [project]
-name = "blank-app-template"
+name = "seller-control-center"
 version = "0.1.0"
-description = "A simple Streamlit app template."
+description = "Amazon UK selling + Alibaba sourcing control center."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
