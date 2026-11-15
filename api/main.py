@@ -13,7 +13,6 @@ from __future__ import annotations
 import hmac
 import json
 import os
-import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -21,7 +20,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from pilot import calc, db
-from pilot.integrations import AlibabaError, AmazonError, factory, sync
+from pilot.integrations import AlibabaError, AmazonError, factory, oauth_state, sync
 from pilot.integrations.alibaba import READ_PATHS, verify_webhook
 
 app = FastAPI(title="Seller Control Center API", version="1.0",
@@ -130,19 +129,16 @@ def sync_amazon_fees():
 # ---------------------------------------------------------------- alibaba
 @app.get("/alibaba/auth/url", dependencies=[Depends(require_key)])
 def alibaba_auth_url():
-    state = secrets.token_urlsafe(16)
-    db.set_secret("alibaba_oauth_state", state)
-    return {"url": factory.alibaba().authorize_url(state)}
+    return {"url": factory.alibaba().authorize_url(oauth_state.start())}
 
 
 @app.get("/alibaba/callback", response_class=HTMLResponse)
 def alibaba_callback(code: str, state: str = ""):
     """OAuth redirect target (set this URL as the app's callback in the App Console)."""
-    expected = db.get_secret("alibaba_oauth_state", "")
-    if not expected or not hmac.compare_digest(state, expected):
-        raise HTTPException(400, "Unknown authorization request. Start again from /alibaba/auth/url.")
-    db.set_secret("alibaba_oauth_state", "")
+    if not oauth_state.accept(state):
+        raise HTTPException(400, "Unknown or expired authorization. Start again from /alibaba/auth/url.")
     t = factory.alibaba().create_token(code)
+    oauth_state.clear()
     return f"<h3>Alibaba account connected</h3><p>{t.get('user_nick', '')}</p>You can close this tab."
 
 

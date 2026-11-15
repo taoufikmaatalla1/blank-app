@@ -9,6 +9,7 @@ import streamlit as st
 
 from . import db
 from .integrations import AlibabaClient, AlibabaError, AmazonClient, AmazonError, factory, sync
+from .integrations import oauth_state
 from .integrations.alibaba import first_price
 
 AMAZON_SETUP = """
@@ -49,14 +50,14 @@ def _handle_alibaba_callback() -> None:
     if "code" not in qp or not AlibabaClient.configured():
         return
     code, state = qp.get("code"), qp.get("state", "")
-    expected = db.get_secret("alibaba_oauth_state", "")
     st.query_params.clear()
-    if not expected or state != expected:
-        st.warning("Ignored an Alibaba authorization that did not start from this app.")
+    if not oauth_state.accept(state):
+        st.warning("This Alibaba authorization has expired or did not start from this app. "
+                   "Click **Connect my Alibaba buyer account** again.")
         return
     try:
         t = factory.alibaba().create_token(code)
-        db.set_secret("alibaba_oauth_state", "")
+        oauth_state.clear()
         st.success(f"Alibaba account connected: {t.get('user_nick') or t.get('account') or ''}")
     except AlibabaError as e:
         _error(e)
@@ -186,12 +187,8 @@ def _alibaba(ok: bool, token: dict) -> None:
             except AlibabaError as e:
                 _error(e)
     else:
-        import secrets
-        if "ali_state" not in st.session_state:
-            st.session_state.ali_state = secrets.token_urlsafe(16)
-            db.set_secret("alibaba_oauth_state", st.session_state.ali_state)
         st.link_button("Connect my Alibaba buyer account ↗",
-                       client.authorize_url(st.session_state.ali_state))
+                       client.authorize_url(oauth_state.start()))
         st.caption("You sign in on Alibaba and come back here automatically.")
         return
 
