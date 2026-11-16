@@ -1,6 +1,6 @@
-"""Starting data, based on the 'Poste de pilotage Amazon UK' worksheet.
+"""Starting data, based on the "Poste de pilotage Amazon UK" worksheet.
 
-Every number is an editable assumption, not a quote from a supplier.
+Every number is an editable assumption, not a supplier quote.
 """
 
 from __future__ import annotations
@@ -13,7 +13,13 @@ DEFAULT_SETTINGS = {
     "usd_per_gbp": 1.27,
     "vat_registered": True,
     "vat_rate": 0.20,
-    "next_step_override": "",
+    # Assumptions used by Product search to estimate a margin before any quote.
+    "default_fba_fee": 3.00,
+    "default_referral_pct": 0.15,
+    "default_freight_per_unit": 0.50,
+    "default_duty_pct": 0.04,
+    "default_ads_pct": 0.10,
+    "default_other_per_unit": 0.10,
 }
 
 _COMMON = {"referral_pct": 0.15, "duty_pct": 0.04, "ads_pct": 0.10, "freight_per_unit": 0.35,
@@ -36,28 +42,20 @@ for _p in PRODUCTS:
         _p.setdefault(_k, _v)
     _p.update({"asin": "", "sku": "", "notes": ""})
 
-_SEARCH_HINTS = {
-    1: "adjustable aluminium phone tablet stand desk",
-    2: "silicone cable ties organiser reusable",
-    3: "precision screwdriver set 115 in 1 magnetic",
-    4: "felt christmas tree kids detachable ornaments",
-    5: "shatterproof christmas baubles set 24",
+SEARCH_HINTS = {
+    1: "adjustable phone tablet stand desk",
+    2: "silicone cable ties organiser",
+    3: "precision screwdriver set 115 in 1",
+    4: "felt christmas tree kids",
+    5: "shatterproof christmas baubles 24",
 }
 
-SUPPLIERS = []
-_sid = 1
-for _p in PRODUCTS:
-    for n in (1, 2, 3, 4):
-        SUPPLIERS.append({
-            "id": _sid, "product_id": _p["id"],
-            "name": f"Supplier {n} – {_p['name'].split(': ')[-1].lower()} (placeholder)",
-            "url": "", "contact": "",
-            "status": "Sent" if (_p["id"] == 1 and n == 1) else "To contact",
-            "unit_price_usd": _p["unit_cost_usd"], "moq": _p["first_order_qty"],
-            "lead_time_days": None, "trade_assurance": 1, "years_on_alibaba": None,
-            "rating": None, "notes": f"Alibaba search: {_SEARCH_HINTS[_p['id']]}",
-        })
-        _sid += 1
+SUPPLIERS = [{
+    "id": 1, "product_id": 1, "name": "Example: phone stand supplier (replace me)",
+    "url": "", "contact": "", "email": "", "status": "Sent", "unit_price_usd": 2.38, "moq": 200,
+    "lead_time_days": None, "trade_assurance": 1, "years_on_alibaba": None, "rating": None,
+    "notes": "Add your real suppliers from Product search.",
+}]
 
 CHECKLIST = [
     ("Account", "Create Amazon Seller Central account (amazon.co.uk)", 1),
@@ -74,11 +72,11 @@ CHECKLIST = [
     ("Sourcing", "Order samples and compare quality", 0),
     ("Sourcing", "Choose supplier and negotiate terms", 0),
     ("Sourcing", "Pay first order via Trade Assurance", 0),
-    ("Shipping & compliance", "Get GTIN / barcodes (or GTIN exemption)", 0),
+    ("Shipping & compliance", "Check product EAN barcodes", 0),
     ("Shipping & compliance", "Check UKCA/CE, toy safety (EN71) and labelling", 0),
     ("Shipping & compliance", "Book freight forwarder and customs (EORI number)", 0),
     ("Shipping & compliance", "Prepare FNSKU labels and carton labels", 0),
-    ("Shipping & compliance", "Create FBA inbound shipment plan", 0),
+    ("Shipping & compliance", "Create FBA inbound shipment", 0),
     ("Listing", "Write titles, bullet points and description", 0),
     ("Listing", "Product photos (main white background + lifestyle)", 0),
     ("Listing", "Backend search terms", 0),
@@ -110,4 +108,5 @@ def snapshot() -> dict:
             {"id": i + 1, "phase": ph, "step": st, "done": d, "sort": i + 1}
             for i, (ph, st, d) in enumerate(CHECKLIST)
         ],
+        "messages": [],
     }

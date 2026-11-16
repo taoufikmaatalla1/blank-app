@@ -67,3 +67,24 @@ def render(kind: str, *, product: dict, supplier: dict, settings: dict, signatur
         target=price * 0.9,
         signature=signature or settings.get("store_name", ""),
     )
+
+
+SUBJECTS = {
+    "Request for quotation": "Quotation request: {product} ({qty} units) - {store}",
+    "Sample request": "Sample request: {product} - {store}",
+    "Negotiation": "Order of {qty} units: {product} - price discussion",
+    "Order follow-up": "Order update request: {product} ({qty} units)",
+}
+
+LABELS = {
+    "Request for quotation": "Request for quotation",
+    "Sample request": "Sample request",
+    "Negotiation": "Price negotiation",
+    "Order follow-up": "Order follow-up",
+}
+
+
+def subject(kind: str, *, product: dict, supplier: dict, settings: dict) -> str:
+    return SUBJECTS[kind].format(
+        product=product.get("name", ""), store=settings.get("store_name", ""),
+        qty=int(supplier.get("moq") or product.get("first_order_qty") or 0))

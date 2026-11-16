@@ -4,16 +4,25 @@ One place to run an Amazon UK store that sources from Alibaba. It is built from
 the *Poste de pilotage Amazon UK* worksheet and starts with the same five products
 and figures, which you can all edit.
 
-| Tab | What it does |
+The app follows the journey of each product, from finding it on Alibaba to selling it on Amazon:
+
+| Page | What it does |
 | --- | --- |
-| **Overview** | Profit per unit and margin verdict (Solid / Thin / Too low) for each product, cash needed for the first order, supplier pipeline, launch progress, money still to pay, next step |
-| **Margins & prices** | Edit price, Alibaba cost (USD), freight, duty, referral %, FBA fee, ads %; see VAT, landed cost, profit, ROI, break-even ACoS; what-if price slider and "price needed for X% margin" |
-| **Amazon comparison** | Log competitor ASINs (price, rating, reviews, BSR) and see where your price sits; quick links to search amazon.co.uk and Alibaba |
-| **Suppliers (Alibaba)** | Pipeline: To contact → Message ready → Sent → Quote received → Sample ordered → Selected / Rejected. Ready-to-send messages (RFQ, samples, negotiation, follow-up) and a quote comparison showing the margin each supplier would give |
-| **Orders** | Purchase orders: quantity, price, shipping, status, amount paid, tracking, ETA |
-| **Listings & ads** | Listing drafts with Amazon length limits checked; Sponsored Products plan with a clicks, orders and ACoS forecast compared to your break-even ACoS |
+| **Dashboard** | How many products are at each stage (Researched → Quotes requested → Quotes received → Supplier selected → Ordered → Paid → In transit → At Amazon → On sale), what to do next for each one, money committed |
+| **Product search** | Search Alibaba (supplier prices) and Amazon (competition, prices) for a keyword, see the estimated margin of every result, add the best ones to the pipeline. Products found on alibaba.com can also be added by hand |
+| **Supplier quotes** | Send a quote request to several suppliers at once: by e-mail from your Gmail when you have their address, or through Alibaba's messages (the app prepares the text and opens the supplier page). Record each quote (price, MOQ, shipping, lead time), compare the margin each one gives, choose one |
+| **Purchases & payments** | Create the purchase order from the chosen quote, get the Alibaba PayPal payment link, record payments, refresh status and tracking from Alibaba |
+| **Products & margins** | Every cost per unit (VAT, Amazon fees, freight, duty, ads) and the profit, with a what-if price slider |
+| **Amazon competition** | Log competing listings and see where your price sits |
+| **Listings & ads** | Listing drafts (Amazon limits checked), Sponsored Products plan, approved price changes on Amazon |
+| **Stock & FBA shipments** | Goods on their way from suppliers, stock in Amazon's warehouses |
+| **Customer orders** | Amazon orders (with FBA, Amazon ships them itself) |
+| **Cash** | Supplier purchases paid and left to pay |
 | **Launch checklist** | 27 steps from account setup to the 14-day review |
-| **Connections** | Live Amazon data (orders, FBA stock, real fee estimates, price changes) and Alibaba buyer API (search, add results as suppliers, product details, stock, order tracking, PayPal payment link) |
+| **Connections** | Status and setup of Amazon, Alibaba and Gmail |
+
+Coming next: publishing listings and creating FBA shipments from the app (part 2), then Amazon
+payouts and ad campaigns (part 3).
 
 Nothing is sent to a supplier or changed on Amazon by this app: messages are
 copied by you into Alibaba, and payment stays on your side.
@@ -38,6 +47,10 @@ Community Cloud, put them in the app's **Settings → Secrets**.
 register as a developer (private application), create an app client, then *Authorize* it
 for your store. That gives the LWA client ID, client secret and refresh token.
 Set `AMAZON_SANDBOX=1` to try it on Amazon's test data first.
+
+**Gmail (supplier e-mails).** Turn on 2-Step Verification on your Google account, create an app
+password (Google account → Security → App passwords) and set `GMAIL_ADDRESS` and
+`GMAIL_APP_PASSWORD`.
 
 **Alibaba.com (Open Platform, buyer API).** Sign up as a *buyer* at
 [openapi.alibaba.com](https://openapi.alibaba.com/) with a country outside mainland China
@@ -97,12 +110,16 @@ The tests check that the starting data reproduces the worksheet's figures
 
 ## Code layout
 
-- `streamlit_app.py`: the interface
+- `streamlit_app.py`: the menu and sidebar
 - `pilot/calc.py`: margin, VAT, fee and ads calculations (no UI code)
 - `pilot/db.py`: SQLite storage, backup and restore
 - `pilot/seed.py`: starting products, suppliers and checklist
 - `pilot/messages.py`: supplier message templates
-- `pilot/connections.py`: the Connections tab
+- `pilot/views/`: one file per page
+- `pilot/pipeline.py`: works out each product's stage and next action
+- `pilot/ui.py`: shared page helpers
+- `pilot/integrations/mailer.py`: Gmail sending
+- `pilot/connections.py`: the Connections page
 - `pilot/integrations/amazon.py`: Amazon SP-API client (LWA auth, orders, inventory, fees, pricing, listings)
 - `pilot/integrations/alibaba.py`: Alibaba.com Open Platform client (signing, OAuth, search, products, orders, webhooks)
 - `api/main.py`: the REST API (FastAPI)

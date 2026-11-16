@@ -27,6 +27,8 @@ SCHEMA: dict[str, dict[str, str]] = {
         "product_id": "INTEGER", "name": "TEXT", "url": "TEXT", "contact": "TEXT", "status": "TEXT",
         "unit_price_usd": "REAL", "moq": "INTEGER", "lead_time_days": "INTEGER",
         "trade_assurance": "INTEGER", "years_on_alibaba": "INTEGER", "rating": "REAL", "notes": "TEXT",
+        "email": "TEXT", "shipping_usd": "REAL", "sample_cost_usd": "REAL", "quote_date": "TEXT",
+        "alibaba_product_id": "TEXT",
     },
     "competitors": {
         "product_id": "INTEGER", "asin": "TEXT", "title": "TEXT", "price": "REAL", "rating": "REAL",
@@ -36,6 +38,8 @@ SCHEMA: dict[str, dict[str, str]] = {
         "product_id": "INTEGER", "supplier_id": "INTEGER", "order_date": "TEXT", "qty": "INTEGER",
         "unit_price_usd": "REAL", "shipping_usd": "REAL", "status": "TEXT", "paid_gbp": "REAL",
         "tracking": "TEXT", "eta": "TEXT", "notes": "TEXT",
+        "payment_method": "TEXT", "alibaba_trade_id": "TEXT", "payment_link": "TEXT",
+        "alibaba_status": "TEXT", "paid_date": "TEXT",
     },
     "listings": {
         "product_id": "INTEGER", "title": "TEXT", "bullets": "TEXT", "description": "TEXT",
@@ -46,12 +50,17 @@ SCHEMA: dict[str, dict[str, str]] = {
         "conversion_rate": "REAL", "keywords": "TEXT", "status": "TEXT",
     },
     "checklist": {"phase": "TEXT", "step": "TEXT", "done": "INTEGER", "sort": "INTEGER"},
+    "messages": {
+        "supplier_id": "INTEGER", "product_id": "INTEGER", "channel": "TEXT", "to_address": "TEXT",
+        "subject": "TEXT", "body": "TEXT", "sent_at": "TEXT", "status": "TEXT",
+    },
 }
 
 SUPPLIER_STATUSES = ["To contact", "Message ready", "Sent", "Quote received",
                      "Sample ordered", "Selected", "Rejected"]
 ORDER_STATUSES = ["Draft", "Awaiting payment", "Paid", "In production", "Shipped",
                   "At Amazon FC", "Cancelled"]
+PAYMENT_METHODS = ["Alibaba Trade Assurance", "PayPal link (Alibaba)", "Bank transfer", "Other"]
 
 
 @contextmanager
@@ -73,6 +82,10 @@ def init(force_seed: bool = False) -> None:
         for table, cols in SCHEMA.items():
             col_sql = ", ".join(f"{c} {t}" for c, t in cols.items())
             con.execute(f"CREATE TABLE IF NOT EXISTS {table} (id INTEGER PRIMARY KEY, {col_sql})")
+            existing = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+            for c, t in cols.items():  # add columns introduced after the table was created
+                if c not in existing:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {c} {t}")
         empty = con.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0
     if force_seed or empty:
         load_snapshot(seed.snapshot())
