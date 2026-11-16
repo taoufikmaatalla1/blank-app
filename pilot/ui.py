@@ -39,11 +39,13 @@ def usd(x: float | None) -> str:
 
 
 def badge(band: str, margin: float) -> str:
-    return f'<span class="badge b-{band.split()[0]}">{band} · {margin * 100:.1f} %</span>'
+    from .i18n import t
+    return f'<span class="badge b-{band.split()[0]}">{t(band)} · {margin * 100:.1f} %</span>'
 
 
 def stage_badge(stage: str) -> str:
-    return f'<span class="badge b-stage">{stage}</span>'
+    from .i18n import t
+    return f'<span class="badge b-stage">{t(stage)}</span>'
 
 
 def ver() -> int:
@@ -56,9 +58,11 @@ def bump() -> None:
 
 
 def link(page_title: str, label: str | None = None, icon: str | None = None) -> None:
+    """Link to a page by its English title; the label is shown in the current language."""
+    from .i18n import t
     page = PAGES.get(page_title)
     if page is not None:
-        st.page_link(page, label=label or page_title, icon=icon)
+        st.page_link(page, label=label or t(page_title), icon=icon)
 
 
 def flash(message: str, kind: str = "success") -> None:
@@ -95,7 +99,9 @@ class Ctx:
         return {p["id"]: p["name"] for p in self.products}
 
     def records(self, df: pd.DataFrame) -> list[dict]:
-        return df.where(df.notna(), None).to_dict("records")
+        """Rows as dicts with empty cells as None (a float column would otherwise keep NaN,
+        which is truthy: an empty e-mail would look like an address)."""
+        return df.astype(object).where(df.notna(), None).to_dict("records")
 
     def stage(self, pid: int) -> str:
         return pipeline.stage(pid, self.records(self.suppliers), self.records(self.orders),

@@ -104,3 +104,17 @@ class Migration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Records(unittest.TestCase):
+    def test_empty_cells_become_none(self):
+        import pandas as pd
+
+        from pilot import ui
+        ctx = ui.Ctx(settings={}, products=[], suppliers=pd.DataFrame(), orders=pd.DataFrame(),
+                     listings=pd.DataFrame(), checklist=pd.DataFrame())
+        df = pd.DataFrame({"email": [float("nan"), "a@b.com"], "moq": [float("nan"), 300.0]})
+        rows = ctx.records(df)
+        self.assertIsNone(rows[0]["email"])
+        self.assertIsNone(rows[0]["moq"])
+        self.assertEqual(rows[1]["email"], "a@b.com")

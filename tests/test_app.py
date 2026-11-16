@@ -10,8 +10,9 @@ VIEWS = ["dashboard", "research", "quotes", "purchases", "products", "competitio
          "fba", "customer_orders", "treasury", "checklist"]
 
 
-def _page(view):
-    return (f"from pilot import db\nfrom pilot.views import {view}\n"
+def _page(view, lang="en"):
+    return (f"import streamlit as st\nst.session_state.lang = {lang!r}\n"
+            f"from pilot import db\nfrom pilot.views import {view}\n"
             f"db.init()\n{view}.render()\n")
 
 
@@ -26,6 +27,21 @@ class AppSmoke(unittest.TestCase):
             with self.subTest(view=view):
                 at = AppTest.from_string(_page(view), default_timeout=30).run()
                 self.assertFalse(at.exception, f"{view}: {at.exception}")
+
+    def test_every_page_renders_in_french(self):
+        for view in VIEWS:
+            with self.subTest(view=view):
+                at = AppTest.from_string(_page(view, "fr"), default_timeout=30).run()
+                self.assertFalse(at.exception, f"{view}: {at.exception}")
+        at = AppTest.from_string(_page("dashboard", "fr"), default_timeout=30).run()
+        self.assertEqual(at.title[0].value, "Tableau de bord")
+
+    def test_main_app_in_french(self):
+        at = AppTest.from_file("../streamlit_app.py", default_timeout=30)
+        at.session_state.lang = "fr"
+        at.run()
+        self.assertFalse(at.exception, at.exception)
+        self.assertEqual(at.title[0].value, "Tableau de bord")
 
     def test_connections_page_unconfigured(self):
         def script():

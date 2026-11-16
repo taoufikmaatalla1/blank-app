@@ -11,6 +11,7 @@ import streamlit as st
 from .. import db, ui
 from ..connections import alibaba_ready, show_error
 from ..integrations import AlibabaError, factory
+from ..i18n import from_display, options, t, to_display
 
 ALIBABA_ORDERS_URL = "https://biz.alibaba.com/order/list.htm?role=buyer"
 
@@ -48,10 +49,10 @@ def find_url(obj) -> str | None:
 
 def render() -> None:
     ctx = ui.load()
-    st.title("🧾 Purchases & payments")
-    st.caption("Create the order with the chosen supplier, pay it (Trade Assurance or Alibaba PayPal "
+    st.title(t("🧾 Purchases & payments"))
+    st.caption(t("Create the order with the chosen supplier, pay it (Trade Assurance or Alibaba PayPal "
                "link) and follow it until it reaches Amazon. The app never pays for you: it opens the "
-               "payment page and records what has been paid.")
+               "payment page and records what has been paid."))
     names, sups = ctx.prod_names, ctx.suppliers
     sup_names = dict(zip(sups["id"], sups["name"]))
     orders = ctx.orders
@@ -61,113 +62,113 @@ def render() -> None:
     total = sum(ctx.order_total_gbp(r) for _, r in active.iterrows())
     paid = float(active["paid_gbp"].fillna(0).sum()) if not active.empty else 0.0
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total ordered", ui.gbp(total))
-    m2.metric("Paid", ui.gbp(paid))
-    m3.metric("Left to pay", ui.gbp(total - paid))
-    m4.metric("Open orders", len(active[~active["status"].isin(["At Amazon FC"])])
+    m1.metric(t("Total ordered"), ui.gbp(total))
+    m2.metric(t("Paid"), ui.gbp(paid))
+    m3.metric(t("Left to pay"), ui.gbp(total - paid))
+    m4.metric(t("Open orders"), len(active[~active["status"].isin(["At Amazon FC"])])
               if not active.empty else 0)
 
     # ------------------------------------------------------------ nouvelle commande
-    st.subheader("New purchase order")
+    st.subheader(t("New purchase order"))
     retained = sups[sups["status"] == "Selected"]
     if sups.empty:
-        st.info("No suppliers yet. Start with Product search.")
+        st.info(t("No suppliers yet. Start with Product search."))
     else:
         default_sid = int(retained.iloc[0]["id"]) if not retained.empty else int(sups.iloc[0]["id"])
         options = sups["id"].tolist()
         sid = st.selectbox(
-            "Supplier", options, index=options.index(default_sid),
+            t("Supplier"), options, index=options.index(default_sid),
             format_func=lambda i: f"{'⭐ ' if sups.set_index('id').loc[i, 'status'] == 'Selected' else ''}"
                                   f"{sup_names[i]} — {names.get(sups.set_index('id').loc[i, 'product_id'], '?')}")
         s = sups.set_index("id").loc[sid].to_dict()
         prod = ctx.prod_by_id.get(s["product_id"], {})
         with st.form(f"new_order_{sid}", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
-            qty = c1.number_input("Quantity", 1, 1_000_000,
+            qty = c1.number_input(t("Quantity"), 1, 1_000_000,
                                   int(s.get("moq") or prod.get("first_order_qty") or 100), 10)
-            price = c2.number_input("Price $/unit", 0.0, 100000.0,
+            price = c2.number_input(t("Price $/unit"), 0.0, 100000.0,
                                     float(s.get("unit_price_usd") or prod.get("unit_cost_usd") or 0), 0.01)
-            ship = c3.number_input("Shipping $", 0.0, 1_000_000.0,
+            ship = c3.number_input(t("Shipping $"), 0.0, 1_000_000.0,
                                    float(s.get("shipping_usd") or 0) if pd.notna(s.get("shipping_usd")) else 0.0, 1.0)
             c4, c5 = st.columns(2)
-            method = c4.selectbox("Payment", db.PAYMENT_METHODS)
-            trade = c5.text_input("Alibaba order number (if already created)",
-                                  help="The Trade Assurance order number, shown in My Orders on Alibaba.")
-            notes = st.text_input("Notes")
-            st.caption(f"Total: {ui.usd(qty * price + ship)} ≈ {ui.gbp((qty * price + ship) / ctx.fx)}")
-            if st.form_submit_button("Create order", type="primary"):
+            method = c4.selectbox(t("Payment"), db.PAYMENT_METHODS, format_func=t)
+            trade = c5.text_input(t("Alibaba order number (if already created)"),
+                                  help=t("The Trade Assurance order number, shown in My Orders on Alibaba."))
+            notes = st.text_input(t("Notes"))
+            st.caption(t("Total: {usd} ≈ {gbp}", usd=ui.usd(qty * price + ship), gbp=ui.gbp((qty * price + ship) / ctx.fx)))
+            if st.form_submit_button(t("Create order"), type="primary"):
                 db.insert("orders", {
                     "product_id": s["product_id"], "supplier_id": int(sid),
                     "order_date": date.today().isoformat(), "qty": int(qty), "unit_price_usd": price,
                     "shipping_usd": ship, "status": "Awaiting payment", "paid_gbp": 0.0,
                     "payment_method": method, "alibaba_trade_id": trade.strip(), "notes": notes})
                 ui.bump()
-                ui.flash("Order created. Pay it, then record the payment below.")
+                ui.flash(t("Order created. Pay it, then record the payment below."))
                 st.rerun()
-        st.link_button("My orders on Alibaba ↗", ALIBABA_ORDERS_URL)
+        st.link_button(t("My orders on Alibaba ↗"), ALIBABA_ORDERS_URL)
 
     if orders.empty:
         return
 
     # ------------------------------------------------------------ une commande
-    st.subheader("Pay and track an order")
+    st.subheader(t("Pay and track an order"))
     labels = {int(r["id"]): f"#{int(r['id'])} · {names.get(r['product_id'], '?')} · "
-                            f"{ui.gbp(ctx.order_total_gbp(r))} · {r['status']}"
+                            f"{ui.gbp(ctx.order_total_gbp(r))} · {t(r['status'])}"
               for _, r in orders.iterrows()}
     unpaid = [i for i, r in orders.set_index("id").iterrows()
               if r["status"] in ("Draft", "Awaiting payment")]
-    oid = st.selectbox("Order", list(labels), format_func=labels.get,
+    oid = st.selectbox(t("Order"), list(labels), format_func=labels.get,
                        index=list(labels).index(unpaid[0]) if unpaid else 0)
     o = orders.set_index("id").loc[oid].to_dict()
     o_total = ctx.order_total_gbp(o)
     o_paid = float(o.get("paid_gbp") or 0) if pd.notna(o.get("paid_gbp")) else 0.0
     c1, c2, c3 = st.columns(3)
-    c1.metric("Amount", ui.gbp(o_total))
-    c2.metric("Paid", ui.gbp(o_paid))
-    c3.metric("Status", o["status"])
+    c1.metric(t("Amount"), ui.gbp(o_total))
+    c2.metric(t("Paid"), ui.gbp(o_paid))
+    c3.metric(t("Status"), t(o["status"]))
 
     a, b = st.columns(2)
     with a:
-        st.markdown("**Payment**")
+        st.markdown(t("**Payment**"))
         link = o.get("payment_link") if isinstance(o.get("payment_link"), str) else ""
         if link:
-            st.link_button("Pay this order ↗", link, type="primary")
+            st.link_button(t("Pay this order ↗"), link, type="primary")
         trade = o.get("alibaba_trade_id") if isinstance(o.get("alibaba_trade_id"), str) else ""
         if trade and alibaba_ready():
-            ok = st.checkbox("I approve requesting a PayPal payment link for this order",
+            ok = st.checkbox(t("I approve requesting a PayPal payment link for this order"),
                              key=f"pay_ok_{oid}")
-            if st.button("Get the Alibaba payment link", disabled=not ok):
+            if st.button(t("Get the Alibaba payment link"), disabled=not ok):
                 try:
                     res = factory.alibaba().payment_link([trade])
                     url = find_url(res)
                     if url:
                         db.update("orders", int(oid), {"payment_link": url})
                         ui.bump()
-                        ui.flash("Payment link ready: click \"Pay this order\".")
+                        ui.flash(t("Payment link ready: click \"Pay this order\"."))
                         st.rerun()
                     st.json(res)
                 except AlibabaError as e:
                     show_error(e)
         elif not trade:
-            st.caption("Pay on Alibaba (Trade Assurance), then record the payment here. Add the "
-                       "Alibaba order number in the table below to track the order automatically.")
+            st.caption(t("Pay on Alibaba (Trade Assurance), then record the payment here. Add the "
+                       "Alibaba order number in the table below to track the order automatically."))
         with st.form(f"paid_{oid}"):
-            amount = st.number_input("Amount paid £", 0.0, 1_000_000.0,
+            amount = st.number_input(t("Amount paid £"), 0.0, 1_000_000.0,
                                      round(max(o_total - o_paid, 0.0), 2), 1.0)
-            when = st.date_input("Payment date", date.today())
-            if st.form_submit_button("Record this payment"):
+            when = st.date_input(t("Payment date"), date.today())
+            if st.form_submit_button(t("Record this payment")):
                 new_paid = o_paid + amount
                 vals = {"paid_gbp": round(new_paid, 2), "paid_date": when.isoformat()}
                 if new_paid >= o_total - 0.01 and o["status"] in ("Draft", "Awaiting payment"):
                     vals["status"] = "Paid"
                 db.update("orders", int(oid), vals)
                 ui.bump()
-                ui.flash("Payment recorded.")
+                ui.flash(t("Payment recorded."))
                 st.rerun()
     with b:
-        st.markdown("**Tracking**")
+        st.markdown(t("**Tracking**"))
         if trade and alibaba_ready():
-            if st.button("Refresh from Alibaba"):
+            if st.button(t("Refresh from Alibaba")):
                 try:
                     client = factory.alibaba()
                     detail = client.order(trade).get("value") or {}
@@ -187,30 +188,31 @@ def render() -> None:
                         pass
                     db.update("orders", int(oid), vals)
                     ui.bump()
-                    ui.flash(f"Order refreshed (Alibaba status: {raw or 'unknown'}).")
+                    ui.flash(t("Order refreshed (Alibaba status: {status}).", status=raw or t("unknown")))
                     st.rerun()
                 except AlibabaError as e:
                     show_error(e)
         elif trade:
-            st.caption("Connect Alibaba (Connections page) to refresh the status automatically.")
-        st.write(f"Alibaba status: {o.get('alibaba_status') or '–'}")
-        st.write(f"Tracking: {o.get('tracking') or '–'}")
-        new_status = st.selectbox("Change status", db.ORDER_STATUSES,
+            st.caption(t("Connect Alibaba (Connections page) to refresh the status automatically."))
+        st.write(t("Alibaba status: {status}", status=o.get("alibaba_status") or "–"))
+        st.write(t("Tracking: {tracking}", tracking=o.get("tracking") or "–"))
+        new_status = st.selectbox(t("Change status"), db.ORDER_STATUSES, format_func=t,
                                   index=db.ORDER_STATUSES.index(o["status"]) if o["status"] in db.ORDER_STATUSES else 0,
                                   key=f"st_{oid}_{ui.ver()}")
-        if new_status != o["status"] and st.button("Save status"):
+        if new_status != o["status"] and st.button(t("Save status")):
             db.update("orders", int(oid), {"status": new_status})
             ui.bump()
             st.rerun()
 
     # ------------------------------------------------------------ toutes les commandes
-    st.subheader("All orders")
+    st.subheader(t("All orders"))
     odf = orders.copy()
     odf["product"] = odf["product_id"].map(names)
     odf["supplier"] = odf["supplier_id"].map(sup_names)
     odf["total"] = odf.apply(ctx.order_total_gbp, axis=1)
     for c in ("order_date", "eta"):
         odf[c] = pd.to_datetime(odf[c], errors="coerce").dt.date
+    odf = to_display(to_display(odf, "status"), "payment_method")
     with st.form(f"orders_{ui.ver()}"):
         ed = st.data_editor(
             odf, hide_index=True, width="stretch", num_rows="dynamic",
@@ -219,24 +221,25 @@ def render() -> None:
                           "tracking", "eta", "notes"],
             disabled=["total"],
             column_config={
-                "order_date": st.column_config.DateColumn("Date"),
-                "product": st.column_config.SelectboxColumn("Product", options=list(names.values()),
+                "order_date": st.column_config.DateColumn(t("Date")),
+                "product": st.column_config.SelectboxColumn(t("Product"), options=list(names.values()),
                                                             required=True),
-                "supplier": st.column_config.SelectboxColumn("Supplier",
+                "supplier": st.column_config.SelectboxColumn(t("Supplier"),
                                                              options=list(sup_names.values())),
-                "qty": st.column_config.NumberColumn("Qty", format="%d", min_value=0),
-                "unit_price_usd": st.column_config.NumberColumn("$/unit", format="%.2f"),
-                "shipping_usd": st.column_config.NumberColumn("Shipping $", format="%.2f"),
-                "total": st.column_config.NumberColumn("Total £", format="£%.2f"),
-                "status": st.column_config.SelectboxColumn("Status", options=db.ORDER_STATUSES,
-                                                           default="Draft", required=True),
-                "paid_gbp": st.column_config.NumberColumn("Paid £", format="%.2f"),
-                "payment_method": st.column_config.SelectboxColumn("Payment", options=db.PAYMENT_METHODS),
-                "alibaba_trade_id": st.column_config.TextColumn("Alibaba order #"),
-                "tracking": "Tracking", "eta": st.column_config.DateColumn("ETA"),
-                "notes": "Notes",
+                "qty": st.column_config.NumberColumn(t("Qty"), format="%d", min_value=0),
+                "unit_price_usd": st.column_config.NumberColumn(t("$/unit"), format="%.2f"),
+                "shipping_usd": st.column_config.NumberColumn(t("Shipping $"), format="%.2f"),
+                "total": st.column_config.NumberColumn(t("Total £"), format="£%.2f"),
+                "status": st.column_config.SelectboxColumn(t("Status"), options=options(db.ORDER_STATUSES),
+                                                           default=t("Draft"), required=True),
+                "paid_gbp": st.column_config.NumberColumn(t("Paid £"), format="%.2f"),
+                "payment_method": st.column_config.SelectboxColumn(t("Payment"), options=options(db.PAYMENT_METHODS)),
+                "alibaba_trade_id": st.column_config.TextColumn(t("Alibaba order #")),
+                "tracking": t("Tracking"), "eta": st.column_config.DateColumn(t("ETA")),
+                "notes": t("Notes"),
             })
-        if st.form_submit_button("Save"):
+        if st.form_submit_button(t("Save")):
+            ed = from_display(from_display(ed, "status"), "payment_method")
             ed["product_id"] = ed["product"].map({v: k for k, v in names.items()})
             ed["supplier_id"] = ed["supplier"].map({v: k for k, v in sup_names.items()})
             for c in ("order_date", "eta"):
